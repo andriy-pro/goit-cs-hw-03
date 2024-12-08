@@ -30,3 +30,12 @@ psql -h localhost -p 5432 -U postgres -d task_management
 
 Список створених таблиць:
 \dt
+
+Видали дані з таблиць (із урахуванням залежностей):
+TRUNCATE TABLE tasks, users, status RESTART IDENTITY CASCADE;
+
+Перевірка кількості записів у таблицях:
+SELECT COUNT(*) FROM tasks;
+SELECT COUNT(*) FROM users;
+SELECT COUNT(*) FROM status;
+
