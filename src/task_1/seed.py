@@ -1,27 +1,17 @@
 import logging
 import random
+from datetime import datetime
 
 import psycopg2
+from config import DB_CONFIG, FILE_CONFIG, LOG_CONFIG
 from faker import Faker
-from psycopg2 import sql
 
 # Налаштування логування
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(**LOG_CONFIG)
 logger = logging.getLogger(__name__)
 
 # Ініціалізація Faker
 faker = Faker("uk_UA")
-
-# Конфігурація підключення до бази даних
-DB_CONFIG = {
-    "dbname": "task_management",
-    "user": "postgres",
-    "password": "goit",
-    "host": "localhost",
-    "port": 5432,
-}
 
 
 def create_connection():
