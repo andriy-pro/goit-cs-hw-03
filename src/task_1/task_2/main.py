@@ -1,7 +1,12 @@
 import logging
 
+from colorama import Fore, Style, init
 from config import COLLECTION_NAME, DATABASE_NAME, MONGO_URI
 from pymongo import MongoClient
+from pymongo.errors import ServerSelectionTimeoutError
+
+# Ініціалізація colorama
+init()
 
 # Налаштування логування
 logging.basicConfig(
@@ -13,43 +18,63 @@ logger = logging.getLogger(__name__)
 
 # Підключення до MongoDB
 try:
-    client = MongoClient(MONGO_URI)
+    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+    client.server_info()  # Перевірка з'єднання
     db = client[DATABASE_NAME]
     collection = db[COLLECTION_NAME]
     logger.info("Підключення до MongoDB успішно.")
+except ServerSelectionTimeoutError as e:
+    logger.error(f"Помилка підключення до MongoDB: {e}")
+    print(
+        f"{Fore.RED}Помилка підключення до бази даних. Перевірте, чи запущено MongoDB.{Style.RESET_ALL}"
+    )
+    raise
 except Exception as e:
-    logger.error(f"Не вдалося підключитися до MongoDB: {e}")
+    logger.error(f"Неочікувана помилка при підключенні до MongoDB: {e}")
     raise
 
 
 def show_all_cats():
-    """
-    Виводить усі документи з колекції 'cats'.
-    """
     try:
-        cats = collection.find()
-        for cat in cats:
-            print(cat)
-        logger.info("Усі коти успішно ідентифіковано.")
+        cats = list(collection.find())
+        if not cats:
+            print(
+                f"{Fore.YELLOW}База даних порожня. Котів не знайдено.{Style.RESET_ALL}"
+            )
+            return
+
+        print(f"\n{Fore.CYAN}=== Список усіх котів ==={Style.RESET_ALL}")
+        for i, cat in enumerate(cats, 1):
+            print(f"\n{Fore.GREEN}Кіт #{i}:{Style.RESET_ALL}")
+            print(f"Ім'я: {cat.get('name', 'Невідомо')}")
+            print(f"Вік: {cat.get('age', 'Невідомо')} років")
+            print(f"Характеристики: {', '.join(cat.get('features', []))}")
+        print(f"\n{Fore.CYAN}=== Кінець списку ==={Style.RESET_ALL}")
+        logger.info(f"Виведено {len(cats)} котів")
     except Exception as e:
-        logger.error(f"Помилка під час ідентифікації котів: {e}")
+        logger.error(f"Помилка при отриманні списку котів: {e}")
+        print(f"{Fore.RED}Помилка при отриманні даних: {e}{Style.RESET_ALL}")
 
 
 def find_cat_by_name(name: str):
-    """
-    Шукає кота за іменем та виводить його дані.
-    :param name: Ім'я кота, якого необхідно знайти.
-    """
+    if not name.strip():
+        print(f"{Fore.YELLOW}Ім'я кота не може бути порожнім!{Style.RESET_ALL}")
+        return
+
     try:
         cat = collection.find_one({"name": name})
         if cat:
-            print(f"Знайдено кота з ім'ям {name}: {cat}")
-            logger.info(f"Кіт із ім'ям {name} знайдений.")
+            print(f"\n{Fore.GREEN}Знайдено кота:{Style.RESET_ALL}")
+            print(f"Ім'я: {cat.get('name')}")
+            print(f"Вік: {cat.get('age')} років")
+            print(f"Характеристики: {', '.join(cat.get('features', []))}")
+            logger.info(f"Знайдено кота: {name}")
         else:
-            print(f"Кота з ім'ям {name} не знайдено.")
-            logger.warning(f"Кіт із ім'ям {name} не знайдений.")
+            print(f"{Fore.YELLOW}Кота з ім'ям '{name}' не знайдено.{Style.RESET_ALL}")
+            logger.warning(f"Кіт не знайдений: {name}")
     except Exception as e:
-        logger.error(f"Помилка під час пошуку кота з ім'ям {name}: {e}")
+        logger.error(f"Помилка пошуку кота: {e}")
+        print(f"{Fore.RED}Помилка пошуку: {e}{Style.RESET_ALL}")
 
 
 def update_cat_age(name: str, new_age: int):
@@ -135,11 +160,8 @@ def insert_cat(name: str, age: int, features: list):
 
 
 def main_menu():
-    """
-    Інтерактивне меню для виконання CRUD операцій.
-    """
     while True:
-        print("\n--- МЕНЮ ---")
+        print(f"\n{Fore.CYAN}=== МЕНЮ УПРАВЛІННЯ КОТЯЧОЮ БАЗОЮ ==={Style.RESET_ALL}")
         print("1. Показати всіх котів")
         print("2. Знайти кота за ім'ям")
         print("3. Оновити вік кота")
@@ -147,38 +169,45 @@ def main_menu():
         print("5. Видалити кота за ім'ям")
         print("6. Видалити всіх котів")
         print("7. Додати нового кота")
-        print("0. Вийти")
+        print(f"{Fore.RED}0. Вийти{Style.RESET_ALL}")
 
-        choice = input("Оберіть опцію: ")
-
-        if choice == "1":
-            show_all_cats()
-        elif choice == "2":
-            name = input("Введіть ім'я кота: ")
-            find_cat_by_name(name)
-        elif choice == "3":
-            name = input("Введіть ім'я кота: ")
-            new_age = int(input("Введіть новий вік кота: "))
-            update_cat_age(name, new_age)
-        elif choice == "4":
-            name = input("Введіть ім'я кота: ")
-            feature = input("Введіть нову характеристику: ")
-            add_feature_to_cat(name, feature)
-        elif choice == "5":
-            name = input("Введіть ім'я кота: ")
-            delete_cat_by_name(name)
-        elif choice == "6":
-            delete_all_cats()
-        elif choice == "7":
-            name = input("Введіть ім'я кота: ")
-            age = int(input("Введіть вік кота: "))
-            features = input("Введіть характеристики (через кому): ").split(", ")
-            insert_cat(name, age, features)
-        elif choice == "0":
-            print("Вихід.")
-            break
-        else:
-            print("Неправильний вибір. Спробуйте знову.")
+        try:
+            choice = input(f"{Fore.GREEN}Оберіть опцію: {Style.RESET_ALL}")
+            if choice == "1":
+                show_all_cats()
+            elif choice == "2":
+                name = input("Введіть ім'я кота: ")
+                find_cat_by_name(name)
+            elif choice == "3":
+                name = input("Введіть ім'я кота: ")
+                new_age = int(input("Введіть новий вік кота: "))
+                update_cat_age(name, new_age)
+            elif choice == "4":
+                name = input("Введіть ім'я кота: ")
+                feature = input("Введіть нову характеристику: ")
+                add_feature_to_cat(name, feature)
+            elif choice == "5":
+                name = input("Введіть ім'я кота: ")
+                delete_cat_by_name(name)
+            elif choice == "6":
+                delete_all_cats()
+            elif choice == "7":
+                name = input("Введіть ім'я кота: ")
+                age = int(input("Введіть вік кота: "))
+                features = input("Введіть характеристики (через кому): ").split(", ")
+                insert_cat(name, age, features)
+            elif choice == "0":
+                print("Вихід.")
+                break
+            else:
+                print("Неправильний вибір. Спробуйте знову.")
+        except ValueError as e:
+            print(f"{Fore.RED}Помилка введення: введіть число!{Style.RESET_ALL}")
+            continue
+        except Exception as e:
+            print(f"{Fore.RED}Неочікувана помилка: {e}{Style.RESET_ALL}")
+            logger.error(f"Помилка в головному меню: {e}")
+            continue
 
 
 if __name__ == "__main__":
