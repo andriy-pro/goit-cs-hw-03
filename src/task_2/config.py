@@ -1,20 +1,38 @@
 import logging
 import os
 from datetime import datetime
+from pathlib import Path
 from urllib.parse import urlparse
 
-from colorama import Fore, Style
+from colorama import Fore, Style, init
+
+# Ініціалізація colorama
+init()
+
+# Отримання шляху до директорії скрипта
+SCRIPT_DIR = Path(__file__).parent.absolute()
 
 # MongoDB налаштування
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
 DATABASE_NAME = os.getenv("DATABASE_NAME", "cats_database")
 COLLECTION_NAME = os.getenv("COLLECTION_NAME", "cats")
-MONGO_TIMEOUT = 5000  # milliseconds
+MONGO_TIMEOUT = 5000  # мілісекунди
+
+# Custom log levels
+logging.SUCCESS = 25  # Between INFO and WARNING
+logging.addLevelName(logging.SUCCESS, "SUCCESS")
 
 # Налаштування логування
-LOG_DIR = "logs"
-LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
+LOG_DIR = SCRIPT_DIR / "logs"
+LOG_FORMAT = "%(asctime)s - %(levelname)-8s - %(message)s"
 LOG_LEVEL = logging.INFO
+
+
+class CustomLogger(logging.Logger):
+    def success(self, msg, *args, **kwargs):
+        if self.isEnabledFor(logging.SUCCESS):
+            self._log(logging.SUCCESS, msg, args, **kwargs)
+
 
 # Кольорові схеми для повідомлень
 COLORS = {
@@ -22,6 +40,7 @@ COLORS = {
     "warning": Fore.YELLOW,
     "error": Fore.RED,
     "header": Fore.CYAN,
+    "menu": Fore.BLUE,
     "reset": Style.RESET_ALL,
 }
 
@@ -35,19 +54,43 @@ MESSAGES = {
     "exit": f"{COLORS['warning']}Вихід.{COLORS['reset']}",
 }
 
+MESSAGES.update(
+    {
+        "cat_not_found": lambda name: f"{COLORS['warning']}Кота з ім'ям '{name}' не знайдено.{COLORS['reset']}",
+        "cat_updated": lambda name: f"{COLORS['success']}Дані кота {name} оновлено.{COLORS['reset']}",
+        "cat_added": lambda name: f"{COLORS['success']}Додано нового кота з ім'ям {name}.{COLORS['reset']}",
+        "cat_deleted": lambda name: f"{COLORS['success']}Кота з ім'ям {name} видалено.{COLORS['reset']}",
+        "db_error": lambda e: f"{COLORS['error']}Помилка бази даних: {e}{COLORS['reset']}",
+        "cats_deleted": lambda count: f"{COLORS['success']}Видалено {count} котів.{COLORS['reset']}",
+    }
+)
+
+MENU_OPTIONS = {
+    "1": ("Показати всіх котів", "show_cats"),
+    "2": ("Знайти кота за ім'ям", "find_cat"),
+    "3": ("Оновити вік кота", "update_cat"),
+    "4": ("Додати характеристику до кота", "add_feature"),
+    "5": ("Видалити кота за ім'ям", "delete_cat"),
+    "6": ("Видалити всіх котів", "delete_all"),
+    "7": ("Додати нового кота", "add_cat"),
+    "0": ("Вийти", "exit"),
+}
+
 
 def get_log_file():
     """Генерує шлях до файлу логу з часовою міткою"""
-    if not os.path.exists(LOG_DIR):
-        os.makedirs(LOG_DIR)
+    if not LOG_DIR.exists():
+        LOG_DIR.mkdir(parents=True)
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    return os.path.join(LOG_DIR, f"cats_app_{timestamp}.log")
+    return LOG_DIR / f"cats_app_{timestamp}.log"
 
 
 def setup_logging():
     """Налаштування системи логування"""
+    logging.setLoggerClass(CustomLogger)
     logging.basicConfig(filename=get_log_file(), level=LOG_LEVEL, format=LOG_FORMAT)
-    return logging.getLogger(__name__)
+    logger = logging.getLogger(__name__)
+    return logger
 
 
 def validate_config():
@@ -67,19 +110,3 @@ def validate_config():
 
 # Валідація конфігурації при імпорті
 validate_config()
-
-
-def get_db_connection(uri: str, db_name: str, collection_name: str):
-    try:
-        client = MongoClient(uri, serverSelectionTimeoutMS=5000)
-        client.server_info()  # Перевірка з'єднання
-        db = client[db_name]
-        collection = db[collection_name]
-        logger.info("Підключення до MongoDB успішне.")
-        return collection
-    except ServerSelectionTimeoutError as e:
-        logger.error(f"Помилка підключення до MongoDB: {e}")
-        raise
-    except Exception as e:
-        logger.error(f"Неочікувана помилка при підключенні до MongoDB: {e}")
-        raise
